@@ -5,6 +5,7 @@ const { IDENTITY_FILE, CONFIG_DIR } = require('../lib/config');
 const { deriveIdentity, saveIdentity } = require('../lib/key');
 const { getAgekeygenPath, getRecipient } = require('../lib/age');
 const { readPassword } = require('../lib/ui');
+const { findProjectRoot, installHooks } = require('../lib/git');
 
 async function run(args) {
   const force = args.includes('--force');
@@ -42,7 +43,17 @@ async function run(args) {
   const recipient = getRecipient(IDENTITY_FILE);
   console.log(`\nIdentity saved to: ${IDENTITY_FILE}`);
   console.log(`Recipient (public key): ${recipient}`);
-  console.log('\nOn each new machine: run "crypt-sync init" with the same passphrase.');
+
+  const projectRoot = findProjectRoot(process.cwd());
+  if (projectRoot) {
+    console.log('\nProject detected — installing hooks...');
+    installHooks(projectRoot);
+    console.log('\nUnlocking files...\n');
+    const { run: unlock } = require('./unlock');
+    await unlock([]);
+  } else {
+    console.log('\nOn each new machine: run "crypt-sync init" with the same passphrase.');
+  }
 }
 
 module.exports = { run };

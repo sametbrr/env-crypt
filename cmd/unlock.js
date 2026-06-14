@@ -46,7 +46,11 @@ async function run(args) {
     const artifactPath = path.join(projectRoot, artifact);
 
     if (!fs.existsSync(artifactPath)) {
-      log(`  no blob: ${artifact} (run lock first)`);
+      if (fs.existsSync(fullPath)) {
+        log(`  not locked: ${entry}  (plaintext exists — run: crypt-sync lock)`);
+      } else {
+        log(`  missing: ${artifact}  (not in git — lock and push from source machine)`);
+      }
       skipped++;
       continue;
     }

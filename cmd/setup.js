@@ -194,8 +194,11 @@ async function run(args) {
 
   const manifestPath = path.join(projectRoot, MANIFEST_FILE);
   if (fs.existsSync(manifestPath) && !args.includes('--force')) {
-    console.log(`${MANIFEST_FILE} already exists. Use --force to reconfigure.\n`);
-    console.log(fs.readFileSync(manifestPath, 'utf8').trim());
+    console.log(`${MANIFEST_FILE} already exists — installing hooks and unlocking...\n`);
+    installHooks(projectRoot);
+    console.log('');
+    const { run: unlock } = require('./unlock');
+    await unlock([]);
     return;
   }
 
