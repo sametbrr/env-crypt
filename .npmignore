@@ -1,5 +1,5 @@
 vendor/
 *.test.js
 tests/
-.envcrypt
-.envcrypt.state
+.cryptsync
+.cryptsync.state

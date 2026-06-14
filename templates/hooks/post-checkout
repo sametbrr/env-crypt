@@ -1,9 +1,9 @@
 #!/bin/sh
-# env-crypt hook start
-if command -v env-crypt >/dev/null 2>&1 && [ -f ".envcrypt" ]; then
-  if ! env-crypt configured 2>/dev/null; then
+# crypt-sync hook start
+if command -v crypt-sync >/dev/null 2>&1 && [ -f ".cryptsync" ]; then
+  if ! crypt-sync configured 2>/dev/null; then
     exit 0
   fi
-  env-crypt unlock --quiet
+  crypt-sync unlock --quiet
 fi
-# env-crypt hook end
+# crypt-sync hook end
