@@ -154,7 +154,7 @@ function displayDir(projectRoot, currentDir, groups, selected) {
     const secretTag = f.secret ? ' \x1b[33m← secret?\x1b[0m' : '';
     const group = groups.get(f.name);
     const groupHint = (group && group.length > 1)
-      ? `\x1b[90m  (${group.length} yerde — "${f.name}" pattern hepsini kapsar)\x1b[0m`
+      ? `\x1b[90m  (aynı isimde ${group.length - 1} dosya daha var — hepsini ayrı seç)\x1b[0m`
       : '';
     console.log(`  ${check} ${String(idx).padStart(2)}.  ${f.relPath}${secretTag}`);
     if (groupHint) console.log(`             ${groupHint}`);
@@ -217,11 +217,12 @@ async function run(args) {
   process.stdout.write(' tamam.\n');
 
   console.log('\nKomutlar:');
-  console.log('  <numara>          dosya seç/kaldır (basename çoklu ise pattern olarak eklenir)');
+  console.log('  <numara>          dosya seç/kaldır (tam path olarak eklenir)');
   console.log('  d<numara>         dizine gir');
-  console.log('  ..                üst dizine çık');
+  console.log('  b / ..            üst dizine çık');
   console.log('  <path|pattern>    direkt ekle: apps/web/.env, *.db, secrets/');
   console.log('  Enter             seçimi bitir');
+  console.log('  q                 iptal et ve çık');
 
   const selected = new Set();
   let currentDir = '';
@@ -234,8 +235,13 @@ async function run(args) {
 
     const input = (await ask(prompt)).trim();
     if (!input) break;
+    if (input === 'q') {
+      console.log('\nİptal edildi.');
+      rl.close();
+      return;
+    }
 
-    if (input === '..') {
+    if (input === '..' || input === 'b') {
       if (!currentDir) {
         console.log('  Zaten proje kökündesin.');
       } else {
@@ -268,9 +274,9 @@ async function run(args) {
       if (!isNaN(num) && /^\d+$/.test(token)) {
         if (num >= 1 && num <= fileItems.length) {
           const item = fileItems[num - 1];
-          const entry = item.groupSize > 1 ? item.name : item.relPath;
+          const entry = item.relPath;
           const label = item.groupSize > 1
-            ? `${entry} \x1b[90m(pattern — ${item.groupSize} dosyayı kapsar)\x1b[0m`
+            ? `${entry} \x1b[90m(aynı isimde ${item.groupSize - 1} dosya daha var)\x1b[0m`
             : entry;
           if (selected.has(entry)) {
             selected.delete(entry);

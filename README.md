@@ -15,6 +15,8 @@ Encrypt `.env` and secret files with age, sync them across machines via git.
 
 ## Quick Start
 
+**First machine (new project):**
+
 ```bash
 npm install -g crypt-sync
 crypt-sync init       # once per machine — enter passphrase
@@ -24,11 +26,22 @@ git commit -m "add encrypted secrets"
 git push
 ```
 
-On another machine:
+**Another machine (existing project):**
 
 ```bash
-crypt-sync init       # same passphrase
-git pull             # auto-decrypts via post-merge hook
+npm install -g crypt-sync
+git clone <repo> && cd <repo>
+crypt-sync init       # same passphrase → hooks installed + files decrypted automatically
+```
+
+**After `npm install -g crypt-sync` update:**
+
+```bash
+# Use @latest — npm update -g may use cached metadata
+npm install -g crypt-sync@latest
+
+cd your-project
+crypt-sync update-hooks   # update .git/hooks/ to the new version
 ```
 
 ---
@@ -41,9 +54,10 @@ git pull             # auto-decrypts via post-merge hook
 | **Passphrase-derived keys** | Same passphrase → same key on every machine. No key file to copy |
 | **Git-native sync** | Encrypted blobs live in your repo. `git push` = sync |
 | **Auto hooks** | Encrypts on push, decrypts on pull via git hooks |
-| **Interactive setup** | Browse project tree, select files, navigate into subdirectories |
-| **Gitignore patterns** | `.env` in `.cryptsync` encrypts every `.env` in the tree |
-| **Monorepo support** | Per-file artifacts: `apps/web/.env` → `apps/web/.env.age` |
+| **Smart `init`** | Detects project on first run — installs hooks and decrypts automatically |
+| **Interactive setup** | Browse project tree, select files, navigate into subdirectories (`b` to go back, `q` to quit) |
+| **Full-path artifacts** | `apps/web/.env` → `apps/web/.env.age` — works on fresh clone with no plaintext present |
+| **`update-hooks`** | Sync `.git/hooks/` to the installed version after `npm install -g crypt-sync@latest` |
 
 ---
 
@@ -65,15 +79,17 @@ npm install -g crypt-sync
 
 The postinstall script downloads the correct `age` binary for your platform and verifies its SHA256 checksum against the official release.
 
+**To update:**
+
+```bash
+npm install -g crypt-sync@latest   # always use @latest, not npm update -g
+```
+
 ### Uninstall
 
 ```bash
 # Remove global package
 npm uninstall -g crypt-sync
-
-# Remove git hooks from a project
-cd your-project
-crypt-sync hooks uninstall
 
 # Remove identity file
 rm -rf ~/.config/crypt-sync
@@ -92,14 +108,14 @@ crypt-sync <command> [options]
   unlock [--force]            Decrypt all blobs to plaintext
   status                      Show encryption state for all entries
   clean                       Remove orphan .age blobs not in manifest
-  hooks install|uninstall     Manage project git hooks
+  update-hooks                Update git hooks to the current version (run after npm update)
   export-key <path>           Export identity key to a file
   import-key <path>           Import identity key from a file
 ```
 
 ### `init`
 
-Run once per machine. Derives an age identity from your passphrase using scrypt. The same passphrase always produces the same key — no key file to transfer between machines.
+Run once per machine. Derives a deterministic age identity from your passphrase using scrypt. The same passphrase always produces the same key — no key file to transfer between machines.
 
 ```bash
 crypt-sync init
@@ -108,11 +124,18 @@ crypt-sync init
 # Recipient: age1...
 ```
 
+**If run inside a project** (a `.cryptsync` file is found), `init` automatically installs git hooks and runs `unlock`. This means on a new machine you only need one command:
+
+```bash
+git clone <repo> && cd <repo>
+crypt-sync init   # passphrase → hooks → files unlocked
+```
+
 Use `--force` to overwrite an existing identity.
 
 ### `setup`
 
-Interactive project setup. Scans the project tree, groups secret candidates by name, lets you browse subdirectories, and suggests gitignore-style patterns for files found in multiple places.
+Interactive project setup. Scans the project tree, lets you browse into subdirectories, and writes a `.cryptsync` manifest with full relative paths.
 
 ```bash
 cd your-project
@@ -122,14 +145,28 @@ crypt-sync setup
 ```
 Dizin: /
 ──────────────────────────────────────────
-  1.  .env        ← 4 yerde (.env pattern hepsini kapsar)
-      d1.  apps/
-      d2.  supabase/
+     1.  .mcp.json  ← secret?
+     d1.  apps/
 
-> d1        ← navigate into apps/
-> 1         ← select, adds ".env" pattern covering 4 files
-> [Enter]   ← finish → encrypts + installs hooks
+> d1          ← navigate into apps/
+> d1          ← navigate into apps/bot/
+> 1           ← select apps/bot/.env  (full path added)
+> b           ← go back one level
+> q           ← cancel and quit
+> [Enter]     ← finish → encrypts + installs hooks
 ```
+
+Navigation keys:
+
+| Key | Action |
+|---|---|
+| `<number>` | Select / deselect file (added as full relative path) |
+| `d<number>` | Enter subdirectory |
+| `b` or `..` | Go back one level |
+| `q` | Cancel and exit setup |
+| Enter | Finish selection → encrypt + install hooks |
+
+**If `.cryptsync` already exists** (e.g. you cloned a repo that already uses crypt-sync), `setup` skips the file selection wizard, installs hooks, and runs `unlock`. Use `--force` to re-run the wizard and reconfigure.
 
 ### `lock`
 
@@ -144,11 +181,19 @@ crypt-sync lock --no-add  # skip git add (used internally by hooks)
 
 ### `unlock`
 
-Decrypts all `.age` blobs in the manifest to plaintext. Does not overwrite locally modified files without `--force`.
+Decrypts all `.age` blobs in the manifest to plaintext. Creates the plaintext file even if it does not exist yet (safe on fresh clones). Does not overwrite locally modified files without `--force`.
 
 ```bash
 crypt-sync unlock
 crypt-sync unlock --force   # overwrite local plaintext with decrypted version
+```
+
+Output messages:
+
+```
+  unlocking apps/bot/.env... done          # blob found → decrypted
+  not locked: apps/bot/.env               # plaintext exists but no blob → run: crypt-sync lock
+  missing: apps/bot/.env.age              # neither blob nor plaintext → lock + push from source machine
 ```
 
 ### `status`
@@ -157,25 +202,22 @@ Shows per-entry state and warns about orphan blobs.
 
 ```bash
 crypt-sync status
-# .env              locked   (unchanged)
-# apps/web/.env     locked   (changed — run lock)
-# apps/api/.env     missing blob — run lock
+# .mcp.json             locked   (unchanged)
+# apps/web/.env         locked   (changed — run lock)
+# apps/api/.env         missing blob — run lock
 ```
 
-### `hooks install` / `hooks uninstall`
+### `update-hooks`
 
-Installs or removes git hooks in the current project's `.git/hooks/`. Appends to existing hooks using sentinels — never overwrites your existing hook content.
+Updates the git hooks in `.git/hooks/` to match the currently installed crypt-sync version. Handles both new-style (`# crypt-sync hook`) and old-style (`# env-crypt hook`) sentinels. Run this after upgrading crypt-sync.
 
 ```bash
-crypt-sync hooks install
-crypt-sync hooks uninstall
+crypt-sync update-hooks
+#   hook pre-commit: updated
+#   hook pre-push: updated
+#   hook post-merge: updated
+#   hook post-checkout: updated
 ```
-
-Installed hooks:
-- `pre-commit` — aborts if any managed plaintext is staged
-- `pre-push` — encrypts changed entries before push
-- `post-merge` — decrypts after `git pull`
-- `post-checkout` — decrypts after branch switch or clone
 
 ### `export-key` / `import-key`
 
@@ -194,11 +236,12 @@ Create a `.cryptsync` file in your project root. Lines starting with `#` are com
 
 ```
 # crypt-sync manifest
-.env                  # matches every .env in the project tree (gitignore-style)
-.env.local
+apps/bot/.env
+apps/bot/.env.development
+apps/dashboard-api/.env
+apps/dashboard-api/.env.development
+.mcp.json
 secrets/              # encrypt entire directory as one archive
-config/keys.json      # specific file path
-apps/web/.env.prod    # explicit path
 *.pem                 # glob pattern
 ```
 
@@ -206,11 +249,13 @@ apps/web/.env.prod    # explicit path
 
 | Pattern | Behaviour |
 |---|---|
+| `apps/bot/.env` (with slash) | Exact path relative to project root — recommended |
 | `.env` (no slash) | Basename match — encrypts every `.env` in the entire tree |
-| `apps/web/.env` (with slash) | Exact path relative to project root |
 | `secrets/` (trailing slash) | Directory — produces a single `.cryptsync.tar.age` archive |
 | `*.pem` | Glob — matches files in project root only |
 | `**/*.pem` | Recursive glob |
+
+> **Tip:** Use full relative paths (e.g. `apps/bot/.env`) rather than basename patterns (`.env`). Basename patterns depend on the plaintext file existing on disk to resolve correctly, which breaks on fresh clones before the first `unlock`.
 
 ---
 
@@ -222,15 +267,15 @@ passphrase
     ▼
 32-byte key → X25519 clamp → Bech32 → AGE-SECRET-KEY-1…
     │
-    ├── age encrypt -r <recipient>  →  .env.age       (committed to git)
+    ├── age encrypt -r <recipient>  →  apps/bot/.env.age   (committed to git)
     │
-    └── age decrypt -i identity.txt ← .env.age        (on pull)
+    └── age decrypt -i identity.txt ← apps/bot/.env.age   (on pull)
 ```
 
-1. **`init`** — derives a deterministic age identity from your passphrase using scrypt. Stored in `~/.config/crypt-sync/identity.txt` (mode 0600, directory mode 0700).
-2. **`setup`** — walks the project tree, finds secret candidates, lets you select with an interactive browser, writes `.cryptsync`, installs hooks, runs initial `lock`.
+1. **`init`** — derives a deterministic age identity from your passphrase using scrypt. Stored in `~/.config/crypt-sync/identity.txt` (mode 0600, directory mode 0700). If a `.cryptsync` project is detected, installs hooks and runs `unlock` automatically.
+2. **`setup`** — walks the project tree, lets you select files with an interactive browser (full paths), writes `.cryptsync`, installs hooks, runs initial `lock`. If `.cryptsync` already exists, skips the wizard and runs hook install + `unlock`.
 3. **`lock`** — for each changed entry: computes SHA256, compares with ledger (`.cryptsync.state`), encrypts with `age -r <recipient>`, runs `git add` on blobs.
-4. **`unlock`** — decrypts each `.age` blob atomically via temp file + rename. Updates the ledger so the next `lock` is a no-op.
+4. **`unlock`** — decrypts each `.age` blob atomically via temp file + rename. Creates parent directories if needed. Updates the ledger so the next `lock` is a no-op.
 5. **Hooks** — `pre-push` runs `lock --no-add`, `post-merge` / `post-checkout` run `unlock`. `pre-commit` aborts if any managed plaintext file is staged.
 6. **Ledger** — `.cryptsync.state` (gitignored) tracks the SHA256 hash of each plaintext entry. Unchanged files are never re-encrypted, preventing noisy git diffs.
 
@@ -247,6 +292,28 @@ npm rebuild crypt-sync
 Or install age manually from [github.com/FiloSottile/age/releases](https://github.com/FiloSottile/age/releases) and ensure it is on your `PATH`.
 
 **`Error: identity not found`** — Run `crypt-sync init` on this machine first.
+
+**`unlock` shows `missing: .env.age`** — The blob was never committed to git. On the source machine:
+
+```bash
+crypt-sync lock
+git add .env.age
+git push
+```
+
+**`unlock` shows `not locked: .env`** — The plaintext file exists locally but was never encrypted. Run:
+
+```bash
+crypt-sync lock
+```
+
+**`git pull` does not decrypt files** — The git hooks are not installed or are outdated. Run:
+
+```bash
+crypt-sync update-hooks
+```
+
+**After `npm install -g crypt-sync@latest`, hooks still behave as before** — `npm install` updates the package but not the hooks already installed in `.git/hooks/`. Run `crypt-sync update-hooks` in each project.
 
 **`unlock` produces wrong plaintext / decryption fails** — `crypt-sync status` prints the recipient fingerprint. Compare it with the fingerprint on the machine that ran `lock`. If they differ, the passphrases are different.
 

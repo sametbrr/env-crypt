@@ -15,6 +15,8 @@
 
 ## Hızlı Başlangıç
 
+**İlk makine (yeni proje):**
+
 ```bash
 npm install -g crypt-sync
 crypt-sync init       # makine başına bir kez — passphrase gir
@@ -24,11 +26,22 @@ git commit -m "add encrypted secrets"
 git push
 ```
 
-Başka bir makinede:
+**Başka bir makine (mevcut proje):**
 
 ```bash
-crypt-sync init       # aynı passphrase
-git pull             # post-merge hook otomatik çözer
+npm install -g crypt-sync
+git clone <repo> && cd <repo>
+crypt-sync init       # aynı passphrase → hook'lar kurulur + dosyalar otomatik çözülür
+```
+
+**`npm install -g crypt-sync` güncellemesi sonrası:**
+
+```bash
+# @latest kullan — npm update -g önbelleğe alınmış metadata kullanabilir
+npm install -g crypt-sync@latest
+
+cd proje-dizini
+crypt-sync update-hooks   # .git/hooks/ dosyalarını yeni versiyona güncelle
 ```
 
 ---
@@ -41,9 +54,10 @@ git pull             # post-merge hook otomatik çözer
 | **Passphrase'den türetilen anahtar** | Aynı passphrase → her makinede aynı anahtar. Anahtar dosyası kopyalanmaz |
 | **Git-native senkron** | Şifreli blob'lar repo'nda yaşar. `git push` = senkron |
 | **Otomatik hook'lar** | Push'ta şifreler, pull'da çözer (git hook'ları) |
-| **İnteraktif setup** | Proje ağacını gez, dosya seç, alt dizinlere gir |
-| **Gitignore desenleri** | `.cryptsync`'teki `.env` → ağaçtaki her `.env`'i şifreler |
-| **Monorepo desteği** | Dosya bazlı artifact: `apps/web/.env` → `apps/web/.env.age` |
+| **Akıllı `init`** | Proje tespit edince hook'ları kurar ve dosyaları otomatik çözer |
+| **İnteraktif setup** | Proje ağacını gez, dosya seç, alt dizinlere gir (`b` geri, `q` çık) |
+| **Tam path artifact'ları** | `apps/web/.env` → `apps/web/.env.age` — plaintext olmadan fresh clone'da da çalışır |
+| **`update-hooks`** | `npm install -g crypt-sync@latest` sonrası `.git/hooks/` dosyalarını günceller |
 
 ---
 
@@ -65,15 +79,17 @@ npm install -g crypt-sync
 
 Postinstall scripti, platformuna uygun `age` binary'sini indirir ve SHA256 checksum'ını resmi release ile doğrular.
 
+**Güncellemek için:**
+
+```bash
+npm install -g crypt-sync@latest   # her zaman @latest kullan, npm update -g değil
+```
+
 ### Kaldırma
 
 ```bash
 # Global paketi kaldır
 npm uninstall -g crypt-sync
-
-# Bir projeden git hook'larını kaldır
-cd proje-dizini
-crypt-sync hooks uninstall
 
 # Identity dosyasını sil
 rm -rf ~/.config/crypt-sync
@@ -92,7 +108,7 @@ crypt-sync <komut> [seçenekler]
   unlock [--force]            Tüm blob'ları plaintext'e çöz
   status                      Tüm entry'lerin şifreleme durumunu göster
   clean                       Manifest'te olmayan orphan .age blob'larını temizle
-  hooks install|uninstall     Proje git hook'larını yönet
+  update-hooks                Git hook'larını mevcut versiyona güncelle (npm update sonrası çalıştır)
   export-key <yol>            Identity anahtarını dosyaya aktar
   import-key <yol>            Identity anahtarını dosyadan içe aktar
 ```
@@ -108,11 +124,18 @@ crypt-sync init
 # Recipient: age1...
 ```
 
+**Bir proje içinde çalıştırılırsa** (`.cryptsync` dosyası bulunursa), `init` git hook'larını otomatik kurar ve `unlock` çalıştırır. Yani yeni bir makinede tek komut yeterlidir:
+
+```bash
+git clone <repo> && cd <repo>
+crypt-sync init   # passphrase → hook'lar kurulur → dosyalar çözülür
+```
+
 Mevcut identity'nin üzerine yazmak için `--force` kullanılır.
 
 ### `setup`
 
-İnteraktif proje kurulumu. Proje ağacını tarar, gizli dosya adaylarını isme göre gruplar, alt dizinlere girmeye izin verir ve birden fazla yerde bulunan dosyalar için gitignore-style desenler önerir.
+İnteraktif proje kurulumu. Proje ağacını tarar, alt dizinlere girmeye izin verir ve `.cryptsync` manifest dosyasını tam relative path'lerle yazar.
 
 ```bash
 cd proje-dizini
@@ -122,14 +145,28 @@ crypt-sync setup
 ```
 Dizin: /
 ──────────────────────────────────────────
-  1.  .env        ← 4 yerde (.env pattern hepsini kapsar)
-      d1.  apps/
-      d2.  supabase/
+     1.  .mcp.json  ← secret?
+     d1.  apps/
 
-> d1        ← apps/ dizinine gir
-> 1         ← seç, 4 dosyayı kapsayan ".env" pattern eklenir
-> [Enter]   ← bitir → şifreler + hook kurar
+> d1          ← apps/ dizinine gir
+> d1          ← apps/bot/ dizinine gir
+> 1           ← apps/bot/.env seç (tam path eklenir)
+> b           ← bir üst dizine çık
+> q           ← iptal et ve çık
+> [Enter]     ← bitir → şifreler + hook kurar
 ```
+
+Navigasyon tuşları:
+
+| Tuş | Eylem |
+|---|---|
+| `<numara>` | Dosya seç / kaldır (tam relative path olarak eklenir) |
+| `d<numara>` | Alt dizine gir |
+| `b` veya `..` | Bir üst dizine çık |
+| `q` | Setup'ı iptal et ve çık |
+| Enter | Seçimi bitir → şifrele + hook kur |
+
+**`.cryptsync` zaten mevcutsa** (örn. crypt-sync kullanan bir repo clone'ladıysan), `setup` dosya seçim wizard'ını atlar, hook'ları kurar ve `unlock` çalıştırır. Wizard'ı yeniden çalıştırmak için `--force` kullan.
 
 ### `lock`
 
@@ -144,11 +181,19 @@ crypt-sync lock --no-add  # git add'i atla (hook'lar tarafından dahili olarak k
 
 ### `unlock`
 
-Manifest'teki tüm `.age` blob'larını plaintext'e çözer. Yerel olarak değiştirilmiş dosyaların üzerine `--force` olmadan yazmaz.
+Manifest'teki tüm `.age` blob'larını plaintext'e çözer. Plaintext dosya mevcut olmasa bile oluşturur (fresh clone'da güvenli). Yerel olarak değiştirilmiş dosyaların üzerine `--force` olmadan yazmaz.
 
 ```bash
 crypt-sync unlock
 crypt-sync unlock --force   # yerel plaintext'in üzerine şifresi çözülmüş versiyonu yaz
+```
+
+Çıktı mesajları:
+
+```
+  unlocking apps/bot/.env... done          # blob bulundu → çözüldü
+  not locked: apps/bot/.env               # plaintext var ama blob yok → çalıştır: crypt-sync lock
+  missing: apps/bot/.env.age              # ne blob ne plaintext var → kaynak makinede lock + push yap
 ```
 
 ### `status`
@@ -157,25 +202,22 @@ Entry başına durumu gösterir ve orphan blob'lar hakkında uyarır.
 
 ```bash
 crypt-sync status
-# .env              locked   (unchanged)
-# apps/web/.env     locked   (changed — run lock)
-# apps/api/.env     missing blob — run lock
+# .mcp.json             locked   (unchanged)
+# apps/web/.env         locked   (changed — run lock)
+# apps/api/.env         missing blob — run lock
 ```
 
-### `hooks install` / `hooks uninstall`
+### `update-hooks`
 
-Mevcut projenin `.git/hooks/` dizinine git hook'larını kurar veya kaldırır. Sentinel'lar kullanarak mevcut hook'lara ekler — var olan içeriğin üzerine yazmaz.
+`.git/hooks/` dizinindeki git hook'larını mevcut crypt-sync versiyonuyla eşleşecek şekilde günceller. Hem yeni (`# crypt-sync hook`) hem eski (`# env-crypt hook`) sentinel formatlarını tanır. crypt-sync güncelledikten sonra çalıştır.
 
 ```bash
-crypt-sync hooks install
-crypt-sync hooks uninstall
+crypt-sync update-hooks
+#   hook pre-commit: updated
+#   hook pre-push: updated
+#   hook post-merge: updated
+#   hook post-checkout: updated
 ```
-
-Kurulan hook'lar:
-- `pre-commit` — yönetilen bir plaintext dosyası stage'lenirse commit'i durdurur
-- `pre-push` — push öncesi değişen entry'leri şifreler
-- `post-merge` — `git pull` sonrası çözer
-- `post-checkout` — branch değişimi veya clone sonrası çözer
 
 ### `export-key` / `import-key`
 
@@ -194,11 +236,12 @@ Proje kökünde bir `.cryptsync` dosyası oluştur. `#` ile başlayan satırlar 
 
 ```
 # crypt-sync manifest
-.env                  # proje ağacındaki her .env'i eşleştirir (gitignore-style)
-.env.local
+apps/bot/.env
+apps/bot/.env.development
+apps/dashboard-api/.env
+apps/dashboard-api/.env.development
+.mcp.json
 secrets/              # dizinin tamamını tek archive olarak şifrele
-config/keys.json      # belirli bir dosya yolu
-apps/web/.env.prod    # açık path
 *.pem                 # glob deseni
 ```
 
@@ -206,11 +249,13 @@ apps/web/.env.prod    # açık path
 
 | Desen | Davranış |
 |---|---|
+| `apps/bot/.env` (slash var) | Proje köküne göre tam path — önerilen yöntem |
 | `.env` (slash yok) | Basename eşleşmesi — ağaçtaki her `.env`'i şifreler |
-| `apps/web/.env` (slash var) | Proje köküne göre tam path |
 | `secrets/` (sonda slash) | Dizin — tek bir `.cryptsync.tar.age` archive'ı üretir |
 | `*.pem` | Glob — yalnızca proje kökündeki dosyaları eşleştirir |
 | `**/*.pem` | Özyinelemeli glob |
+
+> **İpucu:** Basename pattern (`.env`) yerine tam relative path (`apps/bot/.env`) kullan. Basename pattern'lar çözümleme için plaintext dosyanın disk'te mevcut olmasına bağımlıdır; bu durum ilk `unlock` öncesi fresh clone'larda bozulur.
 
 ---
 
@@ -222,15 +267,15 @@ passphrase
     ▼
 32-byte key → X25519 clamp → Bech32 → AGE-SECRET-KEY-1…
     │
-    ├── age encrypt -r <recipient>  →  .env.age       (git'e commit'lenir)
+    ├── age encrypt -r <recipient>  →  apps/bot/.env.age   (git'e commit'lenir)
     │
-    └── age decrypt -i identity.txt ← .env.age        (pull sonrası)
+    └── age decrypt -i identity.txt ← apps/bot/.env.age   (pull sonrası)
 ```
 
-1. **`init`** — scrypt kullanarak passphrase'den deterministik bir age identity türetir. `~/.config/crypt-sync/identity.txt` dosyasına kaydedilir (mod 0600, dizin modu 0700).
-2. **`setup`** — proje ağacını tarar, gizli adayları bulur, interaktif browser ile seçim yapmana izin verir, `.cryptsync`'i yazar, hook'ları kurar, ilk `lock`'u çalıştırır.
+1. **`init`** — scrypt kullanarak passphrase'den deterministik bir age identity türetir. `~/.config/crypt-sync/identity.txt` dosyasına kaydedilir (mod 0600, dizin modu 0700). `.cryptsync` projesi tespit edilirse hook'ları kurar ve `unlock` çalıştırır.
+2. **`setup`** — proje ağacını tarar, interaktif browser ile tam path'lerle dosya seçimi yapar, `.cryptsync`'i yazar, hook'ları kurar, ilk `lock`'u çalıştırır. `.cryptsync` zaten varsa wizard'ı atlar, hook kur + `unlock` yapar.
 3. **`lock`** — her değişen entry için: SHA256 hesaplar, ledger (`.cryptsync.state`) ile karşılaştırır, `age -r <recipient>` ile şifreler, blob'ları `git add` yapar.
-4. **`unlock`** — her `.age` blob'unu geçici dosya + yeniden adlandırma yöntemiyle atomik olarak çözer. Bir sonraki `lock`'ın no-op olması için ledger'ı günceller.
+4. **`unlock`** — her `.age` blob'unu geçici dosya + yeniden adlandırma yöntemiyle atomik olarak çözer. Gerekirse parent dizinleri oluşturur. Bir sonraki `lock`'ın no-op olması için ledger'ı günceller.
 5. **Hook'lar** — `pre-push` `lock --no-add` çalıştırır; `post-merge` / `post-checkout` `unlock` çalıştırır. `pre-commit` yönetilen bir plaintext dosyası stage'lenmişse commit'i durdurur.
 6. **Ledger** — `.cryptsync.state` (gitignore'lı) her plaintext entry'nin SHA256 hash'ini takip eder. Değişmeyen dosyalar hiçbir zaman yeniden şifrelenmez; bu sayede gereksiz git diff'leri önlenir.
 
@@ -247,6 +292,28 @@ npm rebuild crypt-sync
 Ya da age'i [github.com/FiloSottile/age/releases](https://github.com/FiloSottile/age/releases) adresinden manuel olarak kur ve `PATH`'inde olduğundan emin ol.
 
 **`Error: identity not found`** — Önce bu makinede `crypt-sync init` komutunu çalıştır.
+
+**`unlock` `missing: .env.age` diyorsa** — Blob git'e hiç commit'lenmemiş. Kaynak makinede:
+
+```bash
+crypt-sync lock
+git add apps/bot/.env.age
+git push
+```
+
+**`unlock` `not locked: .env` diyorsa** — Plaintext dosyası yerel olarak mevcut ama hiç şifrelenmemiş. Çalıştır:
+
+```bash
+crypt-sync lock
+```
+
+**`git pull` sonrası dosyalar çözülmüyorsa** — Git hook'ları kurulmamış veya güncel değil. Çalıştır:
+
+```bash
+crypt-sync update-hooks
+```
+
+**`npm install -g crypt-sync@latest` sonrası hook'lar eski davranışı sürdürüyorsa** — `npm install` paketi günceller ama `.git/hooks/` içindeki hook dosyalarına dokunmaz. Her projede `crypt-sync update-hooks` çalıştır.
 
 **`unlock` yanlış plaintext üretiyor / şifre çözme başarısız** — `crypt-sync status` recipient fingerprint'ini yazdırır. `lock` çalıştıran makinedeki fingerprint ile karşılaştır. Farklılarsa passphrase'ler farklıdır.
 
