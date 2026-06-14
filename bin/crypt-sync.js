@@ -9,8 +9,9 @@ const COMMANDS = {
   status:       () => require('../cmd/status'),
   clean:        () => require('../cmd/clean'),
   'export-key': () => require('../cmd/export-key'),
-  'import-key': () => require('../cmd/import-key'),
-  guard:        () => require('../cmd/guard'),
+  'import-key':    () => require('../cmd/import-key'),
+  'update-hooks':  () => require('../cmd/update-hooks'),
+  guard:           () => require('../cmd/guard'),
   configured:   () => ({ run: async () => {
     const fs = require('fs');
     const { IDENTITY_FILE } = require('../lib/config');
@@ -33,6 +34,7 @@ Commands:
   clean             Remove orphan .age blobs not in manifest
   export-key <path> Export identity key to a file (keep it safe!)
   import-key <path> Import identity key from a file
+  update-hooks      Update git hooks to the current version (run after npm update)
 
 Options:
   --force     Override safety checks (overwrite existing, force re-encrypt)
