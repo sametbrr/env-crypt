@@ -1,0 +1,10 @@
+#!/bin/sh
+# env-crypt hook start
+if command -v env-crypt >/dev/null 2>&1 && [ -f ".envcrypt" ]; then
+  if ! env-crypt configured 2>/dev/null; then
+    echo "[env-crypt] warning: identity not configured, skipping unlock. Run: env-crypt init"
+    exit 0
+  fi
+  env-crypt unlock --quiet
+fi
+# env-crypt hook end

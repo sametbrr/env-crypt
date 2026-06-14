@@ -1,0 +1,12 @@
+# env-crypt manifest
+# List files and directories to encrypt. One entry per line.
+# Lines starting with # are ignored.
+# Use trailing / for directories.
+
+# Common examples:
+.env
+.env.local
+.env.production
+# docs/
+# secrets/
+# config/keys.json
