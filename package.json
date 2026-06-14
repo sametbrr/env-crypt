@@ -1,6 +1,6 @@
 {
   "name": "crypt-sync",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Keep .env and secret files encrypted in git, synced across machines via age",
   "bin": {
     "crypt-sync": "./bin/crypt-sync.js"
@@ -22,7 +22,15 @@
   "engines": {
     "node": ">=16"
   },
-  "keywords": ["env", "dotenv", "secrets", "encryption", "age", "git", "sync"],
+  "keywords": [
+    "env",
+    "dotenv",
+    "secrets",
+    "encryption",
+    "age",
+    "git",
+    "sync"
+  ],
   "license": "MIT",
   "author": "Samet Birer <samet.birer@narpos.com.tr>",
   "repository": {
